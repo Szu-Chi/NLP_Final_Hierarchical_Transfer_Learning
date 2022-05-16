@@ -1,0 +1,4 @@
+__pycache__/*
+ckiptagger_data
+*.zip
+word_vector
