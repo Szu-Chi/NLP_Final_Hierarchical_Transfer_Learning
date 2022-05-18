@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
 from tensorflow import keras
 import matplotlib.pyplot as plt
 import tensorflow_addons as tfa
@@ -316,11 +317,19 @@ micro_f1.update_state(test_y, pred_y)
 macro_f1.update_state(test_y, pred_y)
 accuray.update_state(test_y, pred_y)
 
-print(f'micro_f1: {micro_f1.result()}')
-print(f'macro_f1: {macro_f1.result()}')
-print(f'accuray: {accuray.result()}')
 
+print(f'micro_f1: {micro_f1.result(): .4f}')
+print(f'macro_f1: {macro_f1.result(): .4f}')
+print(f'accuray: {accuray.result(): .4f}')
 
+label_f1=[]
+for i, label_name in enumerate(dataset_label_name):
+    label_f1.append(f1_score(test_y[:,i], pred_y[:,i], average='micro'))
+    print(f'{label_name:<15}:{label_f1[-1]: .4f}')
+plt.figure()
+plt.bar(dataset_label_name, label_f1)
+plt.xticks(rotation=30, ha='right')
+plt.title(f'label micro f1')
 # =================================================================
 # ==================Below Need to Complete=========================
 # =================================================================
