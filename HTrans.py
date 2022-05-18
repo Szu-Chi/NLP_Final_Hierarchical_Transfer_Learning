@@ -283,62 +283,47 @@ for i, label_name in enumerate(dataset_label_name):
     best_model = model_list[np.argmax(val_micro_f1)]
     best_model_history = history_list[np.argmax(val_micro_f1)]
     save_model_history(best_model_history, label_name)
-    best_model.save_weights('model/'+label_name+'.h5')
+    best_model.save('model/'+label_name+'.h5')
     del model_list
     del best_model
     gc.collect()
 
 
-# =================================================================
-# ==================Below Need to Complete=========================
-# =================================================================
 #%% [markdown]
 # ### Define funtion to get predict result
-def get_model_result(model, topics , test_x):
-    y_pred = np.empty(0)
-    y_test = np.empty(0)
-    max_testing_num = 35000
-    for i in range(round(len(test_x)/max_testing_num)+1):
-        test_start = i*max_testing_num
-        if i != round(len(test_x)/max_testing_num):
-            test_end = (i+1)*max_testing_num
-        else:
-            test_end = len(test_x)
-        x_test = vectorizer(np.array([[s] for s in test_x[test_start:test_end]])).numpy()
-        y_test = np.append(y_test, np.array([1 if topics in x else 0 for x in test_label[test_start:test_end]]))
-        y_pred = np.append(y_pred, model.predict(x_test))
+def get_model_result(model, test_x):
+    x = np.array([id_vector[x] for x in test_x])
+    y_pred = model.predict(x)
     y_pred = np.array([1 if x > 0.5 else 0 for x in y_pred])
-    return y_test, y_pred
+    return y_pred
 #%% [markdown]
-# ### Predict Result   
-category_test1 = np.empty((len(test_data),0))
-category_pred1 = np.empty((len(test_data),0))
-for topics in hierarchy_topics[0]:
-    print(topics)
-    model = make_model()
-    model.load_weights('model/'+topics+'.h5')
-    y_test, y_pred = get_model_result(model, topics)
-    category_test1 = np.hstack([category_test1, np.transpose([y_test])])
-    category_pred1 = np.hstack([category_pred1, np.transpose([y_pred])])
+# ### Predict Result
+pred_y = np.zeros(test_y.shape)   
+for i, label_name in enumerate(dataset_label_name):
+    print(label_name)
+    model = keras.models.load_model(f'model/{label_name}.h5')
+    pred_y[:, i] = get_model_result(model, test_x)
     del model
     gc.collect()
-np.save('category_test1', category_test1)
-np.save('category_pred1', category_pred1)
+
 #%% [markdown]
-# ### Calculate Hierarchy 1 topics reslut
-num_classes = category_pred1.shape[1]
+# ### Calculate Predict Reslut
+num_classes = test_y.shape[1]
 micro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
 macro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
 accuray = keras.metrics.Accuracy()
-micro_f1.update_state(category_test1, category_pred1)
-macro_f1.update_state(category_test1, category_pred1)
-accuray.update_state(category_test1, category_pred1)
+micro_f1.update_state(test_y, pred_y)
+macro_f1.update_state(test_y, pred_y)
+accuray.update_state(test_y, pred_y)
 
 print(f'micro_f1: {micro_f1.result()}')
 print(f'macro_f1: {macro_f1.result()}')
 print(f'accuray: {accuray.result()}')
 
 
+# =================================================================
+# ==================Below Need to Complete=========================
+# =================================================================
 #%% [markdown]
 # ### Define Transfer Model
 def make_trans_model(parent):
