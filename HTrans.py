@@ -96,17 +96,20 @@ for subset_id, subset_label in zip(k_id, k_label):
 
 #%% [markdown]
 # ### Select Train data and Test data
-train_x = np.empty(0)
-train_y = np.empty((0,9))
-for id, label in zip(k_id[1:5], k_label[1:5]):
-    train_x = np.append(train_x, id)
-    train_y = np.append(train_y, label, axis=0)
+def get_subset_data(k_id, k_label, index):
+    x = np.empty(0)
+    y = np.empty((0,9))
+    subset_id = [k_id[i] for i in index]
+    subset_label = [k_label[i] for i in index]
+    for id, label in zip(subset_id, subset_label):
+        x = np.append(x, id)
+        y = np.append(y, label, axis=0)
+    return x, y
 
-test_x = np.empty(0)
-test_y = np.empty((0,9))
-for id, label in zip([k_id[0]], [k_label[0]]):
-    test_x = np.append(test_x, id)
-    test_y = np.append(test_y, label, axis=0)
+subset_test = [0]
+subset_train = np.delete(np.arange(K), subset_test)
+train_x, train_y = get_subset_data(k_id, k_label, subset_train)
+test_x, test_y = get_subset_data(k_id, k_label, subset_test)
 
 #%% [markdown]
 # ### Get Train Content
@@ -116,7 +119,7 @@ for x in train_x:
 
 #%% [markdown]
 # ### Get token
-voc = []
+voc = ['', '[UKN]']
 id_token={}
 for k, v in dataset_content.items():
     # id_token[k] = ws([v])[0]
@@ -213,10 +216,10 @@ def vectorlize(token, word_index):
     vec = []
     for t in token:
         if t in word_index.keys():
-            vec.append(word_index[t]+2)
+            vec.append(word_index[t])
         else:
-            vec.append(1)
-    vec.append(0)
+            vec.append(word_index['[UKN]'])
+    vec.append(word_index[''])
     if len(vec) < max_len:
         pad = np.zeros(max_len)
         pad[0:len(vec)]=vec
@@ -250,7 +253,7 @@ def save_model_history(history, topics):
     plt.savefig('img/micro_f1/'+topics+'_micro_f1.png')
 
 # %% [markdown]
-# ### Training Hierarchy 1 topics model
+# ### Training Model
 class_weight = [1, 2, 3, 5, 10, 30, 50]
 for i, label_name in enumerate(dataset_label_name):
     x = np.array([id_vector[x] for x in train_x])
