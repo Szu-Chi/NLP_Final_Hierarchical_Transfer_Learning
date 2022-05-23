@@ -161,6 +161,26 @@ def make_model(embedding_matrix, metrics=METRICS):
     )
     return model
 
+def make_trans_model(parent):
+    parent_model = keras.models.load_model(model_path+parent+'.h5')
+    # parent_model.load_weights()
+    child_model = keras.models.Model(inputs=parent_model.input, outputs=parent_model.layers[-2].output)
+    new_out = keras.layers.Dense(1, activation='sigmoid', name='new_dense')(child_model.layers[-1].output)
+    child_model = keras.models.Model(inputs=parent_model.input, outputs=new_out)
+    child_model.layers[1].trainable=False
+    optimizers = [
+        tf.keras.optimizers.Adam(learning_rate=5e-5),
+        tf.keras.optimizers.Adam(learning_rate=1e-3)
+    ]
+
+    optimizers_and_layers = [   (optimizers[0], child_model.layers[2]), 
+                                (optimizers[0], child_model.layers[4]),
+                                (optimizers[1], child_model.layers[-1])]
+    optimizer = tfa.optimizers.MultiOptimizer(optimizers_and_layers)
+    child_model.compile(
+        loss="binary_crossentropy", optimizer=optimizer, metrics=METRICS
+    )
+    return child_model
 
 def save_model_history(history, topics):
     plt.figure()
@@ -180,6 +200,33 @@ def save_model_history(history, topics):
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Validate'], loc='upper left')
     plt.savefig('img/micro_f1/'+topics+'_micro_f1.png')
+
+label_subset = {'CAUTION'      :['DISE', 'HEALTH_PROTEC', 'INGRID'],
+                'DISE'         :['CAUTION', 'HEALTH_PROTEC', 'TREAT'],
+                'HEALTH_PROTEC':['CAUTION', 'DISE', 'INGRID'],
+                'INGRID'       :['CAUTION', 'HEALTH_PROTEC', 'DISE'],
+                'TREAT'        :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                'DRUG'         :['DISE', 'CAUTION', 'TREAT'],
+                'MT_HEALTH'    :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                'EXAM'         :['DISE', 'CAUTION', 'TREAT'],
+                'ELDER'        :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                }
+
+def get_subset(train_y, label_name, label_subset):
+    subset_name = label_name
+    subset = label_subset[label_name]
+    label_index = np.where(dataset_label_name==label_name)[0]
+    print(label_index, label_name)
+    y = train_y[:,label_index]
+    print(f'num of train positive: {np.where(y==1)[0].size}')
+    for label in subset:
+        subset_name += "_"+label
+        label_index = np.where(dataset_label_name==label)[0]
+        y = np.logical_or(y, train_y[:,label_index])
+        print(label_index, dataset_label_name[label_index])
+        print(f'num of train positive: {np.where(y==1)[0].size}')
+    return y, subset_name
+    
 #%% [markdown]
 # ### Cross validation
 cv_micro_f1 = []
@@ -261,11 +308,12 @@ for testing_time in range(K):
         id_vector[id]=vectorlize(token, word_index)    
 
     # %% [markdown]
-    # ### Training Model
+    # ### Training Subset Model
     class_weight = [1, 2, 3, 5, 10, 30, 50]
     for i, label_name in enumerate(dataset_label_name):
         x = np.array([id_vector[x] for x in train_x])
-        y = train_y[:,i]
+        # y = train_y[:,i]
+        y, subset_name = get_subset(train_y, label_name, label_subset)
         x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, stratify=y)
         print(label_name)
         print(f'num of train positive: {np.where(y_train==1)[0].size}')
@@ -294,8 +342,49 @@ for testing_time in range(K):
             history_list.append(history)
         best_model = model_list[np.argmax(val_micro_f1)]
         best_model_history = history_list[np.argmax(val_micro_f1)]
+        save_model_history(best_model_history, subset_name)
+        best_model.save(model_path+subset_name+'.h5')
+        del model_list
+        del best_model
+        gc.collect()
+
+    # ### Training Category Model
+    class_weight = [1, 2, 3, 5, 10, 30, 50]
+    for i, label_name in enumerate(dataset_label_name):
+        x = np.array([id_vector[x] for x in train_x])
+        subset_name = get_subset(train_y, label_name, label_subset)[1]
+        y = train_y[:,i]
+        x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, stratify=y)
+
+        print(label_name)
+        print(f'num of train positive: {np.where(y_train==1)[0].size}')
+        print(f'num of val positive: {np.where(y_val==1)[0].size}')
+
+
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='val_micro_f1', 
+            verbose=1,
+            patience=3,
+            mode='max',
+            restore_best_weights=True)
+        model_list = []
+        val_micro_f1 = []
+        history_list = []
+        for cw in class_weight:
+            tf.keras.backend.clear_session()
+            model = make_trans_model(subset_name)
+            # img_path='network_image.png'
+            # keras.utils.plot_model(model, to_file=img_path)
+            # model.summary()
+            history = model.fit(x_train, y_train, batch_size=128, epochs=10, callbacks=[early_stopping],
+                                validation_split=0.15, class_weight = {0: 1, 1:cw})
+            val_micro_f1.append(max(history.history['val_micro_f1']))
+            model_list.append(model)
+            history_list.append(history)
+        best_model = model_list[np.argmax(val_micro_f1)]
+        best_model_history = history_list[np.argmax(val_micro_f1)]
         save_model_history(best_model_history, label_name)
-        best_model.save(model_path+label_name+'.h5')
+        best_model.save_weights(model_path+label_name+'.h5')
         del model_list
         del best_model
         gc.collect()
@@ -305,7 +394,9 @@ for testing_time in range(K):
     pred_y = np.zeros(test_y.shape)   
     for i, label_name in enumerate(dataset_label_name):
         print(label_name)
-        model = keras.models.load_model(model_path+f'{label_name}.h5')
+        tf.keras.backend.clear_session()
+        model = make_model(embedding_matrix)
+        model.load_weights(model_path+label_name+'.h5')
         pred_y[:, i] = get_model_result(model, test_x)
         del model
         gc.collect()
