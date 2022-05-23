@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 from tensorflow import keras
 import matplotlib.pyplot as plt
 import tensorflow_addons as tfa
@@ -241,7 +241,7 @@ def save_model_history(history, topics):
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Validate'], loc='upper left')
-    plt.savefig('img/loss/'+topics+'_loss.png')
+    plt.savefig('img/loss/subset/'+topics+'_loss.png')
 
     plt.figure()
     plt.plot(history.history['micro_f1'])
@@ -250,15 +250,44 @@ def save_model_history(history, topics):
     plt.ylabel('micro_f1')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Validate'], loc='upper left')
-    plt.savefig('img/micro_f1/'+topics+'_micro_f1.png')
+    plt.savefig('img/micro_f1/subset/'+topics+'_micro_f1.png')
+
+#%%  [markdown]
+# ### Create Label Subset
+label_subset = {'CAUTION'      :['DISE', 'HEALTH_PROTEC', 'INGRID'],
+                'DISE'         :['CAUTION', 'HEALTH_PROTEC', 'TREAT'],
+                'HEALTH_PROTEC':['CAUTION', 'DISE', 'INGRID'],
+                'INGRID'       :['CAUTION', 'HEALTH_PROTEC', 'DISE'],
+                'TREAT'        :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                'DRUG'         :['DISE', 'CAUTION', 'TREAT'],
+                'MT_HEALTH'    :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                'EXAM'         :['DISE', 'CAUTION', 'TREAT'],
+                'ELDER'        :['DISE', 'CAUTION', 'HEALTH_PROTEC'],
+                }
+
+def get_subset(train_y, label_name, label_subset):
+    subset_name = label_name
+    subset = label_subset[label_name]
+    label_index = np.where(dataset_label_name==label_name)[0]
+    print(label_index, label_name)
+    y = train_y[:,label_index]
+    print(f'num of train positive: {np.where(y==1)[0].size}')
+    for label in subset:
+        subset_name += "_"+label
+        label_index = np.where(dataset_label_name==label)[0]
+        y = np.logical_or(y, train_y[:,label_index])
+        print(label_index, dataset_label_name[label_index])
+        print(f'num of train positive: {np.where(y==1)[0].size}')
+    return y, subset_name
 
 # %% [markdown]
-# ### Training Model
+# ### Training Subset Model
 class_weight = [1, 2, 3, 5, 10, 30, 50]
 for i, label_name in enumerate(dataset_label_name):
     x = np.array([id_vector[x] for x in train_x])
-    y = train_y[:,i]
+    y, subset_name = get_subset(train_y, label_name, label_subset)
     x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, stratify=y)
+
     print(label_name)
     print(f'num of train positive: {np.where(y_train==1)[0].size}')
     print(f'num of val positive: {np.where(y_val==1)[0].size}')
@@ -286,12 +315,76 @@ for i, label_name in enumerate(dataset_label_name):
         history_list.append(history)
     best_model = model_list[np.argmax(val_micro_f1)]
     best_model_history = history_list[np.argmax(val_micro_f1)]
-    save_model_history(best_model_history, label_name)
-    best_model.save('model/'+label_name+'.h5')
+    save_model_history(best_model_history, subset_name)
+    best_model.save('model/'+subset_name+'.h5')
     del model_list
     del best_model
     gc.collect()
 
+#%% [markdown]
+# ### Define Transfer Model
+def make_trans_model(parent):
+    parent_model = keras.models.load_model('model/'+parent+'.h5')
+    # parent_model.load_weights()
+    child_model = keras.models.Model(inputs=parent_model.input, outputs=parent_model.layers[-2].output)
+    new_out = keras.layers.Dense(1, activation='sigmoid', name='new_dense')(child_model.layers[-1].output)
+    child_model = keras.models.Model(inputs=parent_model.input, outputs=new_out)
+    child_model.layers[1].trainable=False
+    optimizers = [
+        tf.keras.optimizers.Adam(learning_rate=5e-4),
+        tf.keras.optimizers.Adam(learning_rate=1e-3)
+    ]
+
+    optimizers_and_layers = [   (optimizers[0], child_model.layers[2]), 
+                                (optimizers[0], child_model.layers[4]),
+                                (optimizers[1], child_model.layers[-1])]
+    optimizer = tfa.optimizers.MultiOptimizer(optimizers_and_layers)
+    child_model.compile(
+        loss="binary_crossentropy", optimizer=optimizer, metrics=METRICS
+    )
+    return child_model
+
+# %% [markdown]
+# ### Training Category Model
+class_weight = [1, 2, 3, 5, 10, 30, 50]
+for i, label_name in enumerate(dataset_label_name):
+    x = np.array([id_vector[x] for x in train_x])
+    subset_name = get_subset(train_y, label_name, label_subset)[1]
+    y = train_y[:,i]
+    x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, stratify=y)
+
+    print(label_name)
+    print(f'num of train positive: {np.where(y_train==1)[0].size}')
+    print(f'num of val positive: {np.where(y_val==1)[0].size}')
+
+
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_micro_f1', 
+        verbose=1,
+        patience=3,
+        mode='max',
+        restore_best_weights=True)
+    model_list = []
+    val_micro_f1 = []
+    history_list = []
+    for cw in class_weight:
+        tf.keras.backend.clear_session()
+        model = make_trans_model(subset_name)
+        # img_path='network_image.png'
+        # keras.utils.plot_model(model, to_file=img_path)
+        # model.summary()
+        history = model.fit(x_train, y_train, batch_size=128, epochs=10, callbacks=[early_stopping],
+                            validation_split=0.15, class_weight = {0: 1, 1:cw})
+        val_micro_f1.append(max(history.history['val_micro_f1']))
+        model_list.append(model)
+        history_list.append(history)
+    best_model = model_list[np.argmax(val_micro_f1)]
+    best_model_history = history_list[np.argmax(val_micro_f1)]
+    save_model_history(best_model_history, label_name)
+    best_model.save_weights('model/'+label_name+'.h5')
+    del model_list
+    del best_model
+    gc.collect()
 
 #%% [markdown]
 # ### Define funtion to get predict result
@@ -300,12 +393,15 @@ def get_model_result(model, test_x):
     y_pred = model.predict(x)
     y_pred = np.array([1 if x > 0.5 else 0 for x in y_pred])
     return y_pred
+
 #%% [markdown]
 # ### Predict Result
 pred_y = np.zeros(test_y.shape)   
 for i, label_name in enumerate(dataset_label_name):
     print(label_name)
-    model = keras.models.load_model(f'model/{label_name}.h5')
+    tf.keras.backend.clear_session()
+    model = make_model()
+    model.load_weights(f'model/{label_name}.h5')
     pred_y[:, i] = get_model_result(model, test_x)
     del model
     gc.collect()
@@ -315,19 +411,19 @@ for i, label_name in enumerate(dataset_label_name):
 num_classes = test_y.shape[1]
 micro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
 macro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
+weighted_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='weighted')
 accuray = keras.metrics.Accuracy()
 micro_f1.update_state(test_y, pred_y)
 macro_f1.update_state(test_y, pred_y)
-accuray.update_state(test_y, pred_y)
+weighted_f1.update_state(test_y, pred_y)
 
-
-print(f'micro_f1: {micro_f1.result(): .4f}')
-print(f'macro_f1: {macro_f1.result(): .4f}')
-print(f'accuray: {accuray.result(): .4f}')
+print(f'micro_f1   : {micro_f1.result(): .4f}')
+print(f'macro_f1   : {macro_f1.result(): .4f}')
+print(f'weighted_f1: {weighted_f1.result(): .4f}')
 
 label_f1=[]
 for i, label_name in enumerate(dataset_label_name):
-    label_f1.append(f1_score(test_y[:,i], pred_y[:,i], average='micro'))
+    label_f1.append(f1_score(test_y[:,i], pred_y[:,i]))
     print(f'{label_name:<15}:{label_f1[-1]: .4f}')
 plt.figure()
 plt.bar(dataset_label_name, label_f1)
