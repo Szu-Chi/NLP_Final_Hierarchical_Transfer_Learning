@@ -15,6 +15,7 @@ import jieba
 from ckiptagger import WS
 ws = WS("./ckiptagger_data")
 import gc
+from imp import reload
 
 #%% [markdown]
 # ### Loading HealthDoc dataset
@@ -109,40 +110,9 @@ embedding_layer = Embedding(
 
 # %% [markdown]
 # ### Define HTrans Model
-METRICS = [
-    tfa.metrics.F1Score(num_classes=1, threshold=0.5, average='micro', name='micro_f1')
-]
-
-def make_model(metrics=METRICS):
-    int_sequences_input = keras.Input(shape=(300,), dtype="int64")
-    # embedded_sequences = embedding_layer(int_sequences_input)
-    embedded_sequences = Embedding(
-        num_tokens,
-        embedding_dim,
-        embeddings_initializer=keras.initializers.Constant(embedding_matrix.copy()),
-        trainable=False,
-    )(int_sequences_input)
-
-    forward_gru = keras.layers.GRU(96, return_sequences=True)
-    backward_gru = keras.layers.GRU(96, return_sequences=True, go_backwards=True)
-    bidirectional_layer = keras.layers.Bidirectional(forward_gru, backward_layer=backward_gru)(embedded_sequences)
-    bidirectional_layer = keras.layers.Dropout(0.4)(bidirectional_layer)
-
-    max_pooling_layer = keras.layers.MaxPooling1D(5)(bidirectional_layer)
-    mean_pooling_layer = keras.layers.AveragePooling1D(5)(bidirectional_layer)
-    attention_layer = keras.layers.Attention()([bidirectional_layer, bidirectional_layer])
-
-    merged = keras.layers.concatenate([attention_layer, mean_pooling_layer, max_pooling_layer], axis=1)
-
-    flatten_layer = keras.layers.Flatten()(merged)
-    # linear_layer = keras.layers.Dense(200, activation='sigmoid')(flatten_layer)
-    out = keras.layers.Dense(1, activation='sigmoid')(flatten_layer)
-
-    model = keras.models.Model(int_sequences_input, out)
-    model.compile(
-        loss="binary_crossentropy", optimizer="adam", metrics=METRICS
-    )
-    return model
+import model
+reload(model)
+from model import make_model, make_trans_model
 
 #%% [markdown]
 # ### Define Vectorlize
@@ -240,7 +210,7 @@ for i, label_name in enumerate(dataset_label_name):
     history_list = []
     for cw in class_weight:
         tf.keras.backend.clear_session()
-        model = make_model()
+        model = make_model(embedding_matrix, num_tokens, embedding_dim)
         # img_path='network_image.png'
         # keras.utils.plot_model(model, to_file=img_path)
         # model.summary()
@@ -252,33 +222,10 @@ for i, label_name in enumerate(dataset_label_name):
     best_model = model_list[np.argmax(val_micro_f1)]
     best_model_history = history_list[np.argmax(val_micro_f1)]
     save_model_history(best_model_history, subset_name)
-    best_model.save('model/'+subset_name+'.h5')
+    best_model.save_weights('model/'+subset_name+'.h5')
     del model_list
     del best_model
     gc.collect()
-
-#%% [markdown]
-# ### Define Transfer Model
-def make_trans_model(parent):
-    parent_model = keras.models.load_model('model/'+parent+'.h5')
-    # parent_model.load_weights()
-    child_model = keras.models.Model(inputs=parent_model.input, outputs=parent_model.layers[-2].output)
-    new_out = keras.layers.Dense(1, activation='sigmoid', name='new_dense')(child_model.layers[-1].output)
-    child_model = keras.models.Model(inputs=parent_model.input, outputs=new_out)
-    child_model.layers[1].trainable=False
-    optimizers = [
-        tf.keras.optimizers.Adam(learning_rate=5e-4),
-        tf.keras.optimizers.Adam(learning_rate=1e-3)
-    ]
-
-    optimizers_and_layers = [   (optimizers[0], child_model.layers[2]), 
-                                (optimizers[0], child_model.layers[4]),
-                                (optimizers[1], child_model.layers[-1])]
-    optimizer = tfa.optimizers.MultiOptimizer(optimizers_and_layers)
-    child_model.compile(
-        loss="binary_crossentropy", optimizer=optimizer, metrics=METRICS
-    )
-    return child_model
 
 # %% [markdown]
 # ### Training Category Model
@@ -306,7 +253,7 @@ for i, label_name in enumerate(dataset_label_name):
     history_list = []
     for cw in class_weight:
         tf.keras.backend.clear_session()
-        model = make_trans_model(subset_name)
+        model = make_trans_model(subset_name, embedding_matrix, num_tokens, embedding_dim)
         # img_path='network_image.png'
         # keras.utils.plot_model(model, to_file=img_path)
         # model.summary()
@@ -337,7 +284,7 @@ pred_y = np.zeros(test_y.shape)
 for i, label_name in enumerate(dataset_label_name):
     print(label_name)
     tf.keras.backend.clear_session()
-    model = make_model()
+    model = make_model(embedding_matrix, num_tokens, embedding_dim)
     model.load_weights(f'model/{label_name}.h5')
     pred_y[:, i] = get_model_result(model, test_x)
     del model

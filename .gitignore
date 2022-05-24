@@ -4,3 +4,4 @@ ckiptagger_data
 word_vector
 model/*
 img/*
+*.csv

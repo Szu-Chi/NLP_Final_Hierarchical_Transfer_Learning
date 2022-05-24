@@ -15,6 +15,7 @@ import jieba
 from ckiptagger import WS
 ws = WS("./ckiptagger_data")
 import gc
+from imp import reload
 
 #%% [markdown]
 # ### Loading HealthDoc dataset
@@ -63,39 +64,10 @@ def get_subset_data(k_id, k_label, index):
         y = np.append(y, label, axis=0)
     return x, y
 
-METRICS = [
-    tfa.metrics.F1Score(num_classes=1, threshold=0.5, average='micro', name='micro_f1')
-]
-
-def make_model(embedding_matrix, metrics=METRICS):
-    int_sequences_input = keras.Input(shape=(300,), dtype="int64")
-    embedded_sequences = Embedding(
-        num_tokens,
-        embedding_dim,
-        embeddings_initializer=keras.initializers.Constant(embedding_matrix.copy()),
-        trainable=False,
-    )(int_sequences_input)
-
-    forward_gru = keras.layers.GRU(96, return_sequences=True)
-    backward_gru = keras.layers.GRU(96, return_sequences=True, go_backwards=True)
-    bidirectional_layer = keras.layers.Bidirectional(forward_gru, backward_layer=backward_gru)(embedded_sequences)
-    bidirectional_layer = keras.layers.Dropout(0.4)(bidirectional_layer)
-
-    max_pooling_layer = keras.layers.MaxPooling1D(5)(bidirectional_layer)
-    mean_pooling_layer = keras.layers.AveragePooling1D(5)(bidirectional_layer)
-    attention_layer = keras.layers.Attention()([bidirectional_layer, bidirectional_layer])
-
-    merged = keras.layers.concatenate([attention_layer, mean_pooling_layer, max_pooling_layer], axis=1)
-
-    flatten_layer = keras.layers.Flatten()(merged)
-    # linear_layer = keras.layers.Dense(200, activation='sigmoid')(flatten_layer)
-    out = keras.layers.Dense(1, activation='sigmoid')(flatten_layer)
-
-    model = keras.models.Model(int_sequences_input, out)
-    model.compile(
-        loss="binary_crossentropy", optimizer="adam", metrics=METRICS
-    )
-    return model
+# ### Define HTrans Model
+import model
+reload(model)
+from model import make_model
 
 def save_model_history(history, topics):
     plt.figure()
@@ -220,7 +192,7 @@ for testing_time in range(K):
         history_list = []
         for cw in class_weight:
             tf.keras.backend.clear_session()
-            model = make_model(embedding_matrix)
+            model = make_model(embedding_matrix, num_tokens, embedding_dim)
             # img_path='network_image.png'
             # keras.utils.plot_model(model, to_file=img_path)
             # model.summary()
@@ -243,7 +215,7 @@ for testing_time in range(K):
     for i, label_name in enumerate(dataset_label_name):
         print(label_name)
         tf.keras.backend.clear_session()
-        model = make_model(embedding_matrix)
+        model = make_model(embedding_matrix, num_tokens, embedding_dim)
         model.load_weights(model_path+label_name+'.h5')
         pred_y[:, i] = get_model_result(model, test_x)
         del model
@@ -285,5 +257,29 @@ for testing_time in range(K):
 # ### CV Result
 print(f'micro_f1   : {sum(cv_micro_f1)/K: .4f}')
 print(f'macro_f1   : {sum(cv_macro_f1)/K: .4f}')
-print(f'weighted_f1: {sum(cv_weighted_f1)/K: .4f}')
-print(f'accuray    : {sum(cv_accuray) /K: .4f}')
+print(f'weighted_f1: {sum(cv_weighted_f1)/K: .4f}\n')
+
+label_f1_mean = np.mean(cv_label_f1, axis=0)
+for label_name, f1_mean in zip(dataset_label_name, label_f1_mean):
+    print(f'{label_name:<15}:{f1_mean: .4f}')
+    
+#%% [markdown]
+# ### Export Result to CSV
+with open('CV_result.csv', 'w') as f:
+    f.write(', micro_f1, macro_f1, weighted_f1\n')
+    for micro, marco, weighted in zip(cv_micro_f1, cv_macro_f1, cv_weighted_f1):
+        f.write(f',{micro}, {marco}, {weighted} \n')
+    f.write(f'Avg., {sum(cv_micro_f1)/K: .5f}, {sum(cv_macro_f1)/K: .5f}, {sum(cv_weighted_f1)/K: .5f}\n')
+
+    for label_name in dataset_label_name:
+        f.write(f',{label_name} ')
+    f.write('\n')
+    for label_f1 in cv_label_f1:
+        for f1 in label_f1:
+            f.write(f', {f1}')
+        f.write('\n')
+    label_f1_mean = np.mean(cv_label_f1, axis=0)
+    f.write('Avg.,')
+    for f1 in label_f1_mean:
+        f.write(f'{f1: .5f}, ')
+    f.write('\n')
