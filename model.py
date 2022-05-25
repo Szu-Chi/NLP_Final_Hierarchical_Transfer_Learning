@@ -45,7 +45,7 @@ def make_model(embedding_matrix, num_tokens, embedding_dim, metrics=METRICS):
 
     model = keras.models.Model(int_sequences_input, out)
     model.compile(
-        loss="binary_crossentropy", optimizer="adam", metrics=METRICS
+        loss="binary_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=1e-3), metrics=METRICS
     )
     return model
 

@@ -153,7 +153,7 @@ for testing_time in range(K):
 
     # %% [markdown]
     # ### Load pre-trained word embeddings
-    path_to_glove_file = './word_vector/wiki.zh.vector'
+    path_to_glove_file = './word_vector/healthdoc-wiki.vector'
     embeddings_index = {}
     with open(path_to_glove_file,'r', encoding='utf-8') as f:
         for line in f:
@@ -166,7 +166,7 @@ for testing_time in range(K):
     #%% [markdown]
     # ### Prepare a corresponding embedding matrix
     num_tokens = len(voc) + 2
-    embedding_dim = 400
+    embedding_dim = 300
     hits = 0
     misses = 0
 
@@ -267,7 +267,7 @@ for testing_time in range(K):
             # img_path='network_image.png'
             # keras.utils.plot_model(model, to_file=img_path)
             # model.summary()
-            history = model.fit(x_train, y_train, batch_size=128, epochs=10,
+            history = model.fit(x_train, y_train, batch_size=128, epochs=10, callbacks=[early_stopping],
                                 validation_split=0.15, class_weight = {0: 1, 1:cw})
             val_micro_f1.append(max(history.history['val_micro_f1']))
             model_list.append(model)

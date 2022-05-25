@@ -125,7 +125,7 @@ for testing_time in range(K):
 
     # %% [markdown]
     # ### Load pre-trained word embeddings
-    path_to_glove_file = './word_vector/wiki.zh.vector'
+    path_to_glove_file = './word_vector/healthdoc-wiki.vector'
     embeddings_index = {}
     with open(path_to_glove_file,'r', encoding='utf-8') as f:
         for line in f:
@@ -138,7 +138,7 @@ for testing_time in range(K):
     #%% [markdown]
     # ### Prepare a corresponding embedding matrix
     num_tokens = len(voc) + 2
-    embedding_dim = 400
+    embedding_dim = 300
     hits = 0
     misses = 0
 
