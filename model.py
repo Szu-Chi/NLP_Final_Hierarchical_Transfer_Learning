@@ -58,7 +58,7 @@ def make_trans_model(parent, embedding_matrix, num_tokens, embedding_dim):
     child_model = keras.models.Model(inputs=parent_model.input, outputs=new_out)
     child_model.layers[1].trainable=False
     optimizers = [
-        tf.keras.optimizers.Adam(learning_rate=5e-4),
+        tf.keras.optimizers.Adam(learning_rate=1e-3),
         tf.keras.optimizers.Adam(learning_rate=1e-3)
     ]
 
