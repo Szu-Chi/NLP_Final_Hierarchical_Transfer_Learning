@@ -6,7 +6,6 @@ from gensim.models.callbacks import CallbackAny2Vec
 
 import corpus
 
-
 def printTime():
     t = time.localtime()
     print('[{h}:{m}:{s}] '.format(h=t.tm_hour, m=t.tm_min, s=t.tm_sec), end='')
@@ -15,20 +14,25 @@ def printTime():
 # https://datascience.stackexchange.com/questions/9819/number-of-epochs-in-gensim-word2vec-implementation
 class LossLogger(CallbackAny2Vec):
     # Output loss at each epoch
+    # Word2vec: loss tally maxes at 134217728.0 due to float32 limited-precision
+    # https://github.com/RaRe-Technologies/gensim/issues/2735
     def __init__(self):
       self.epoch = 1
       self.losses = []
 
     def on_epoch_begin(self, model):
       printTime()
-      print('\nEpoch: {epoch}'.format(epoch=self.epoch))
+      print('\nEpoch: {}'.format(self.epoch))
 
     def on_epoch_end(self, model):
-      loss = model.get_latest_training_loss()
-      self.losses.append(loss)
-      print('  Loss: {loss}'.format(loss=loss))
-      self.epoch += 1                       
-
+        loss = model.get_latest_training_loss()
+        if self.epoch == 1:
+            print('	Loss after epoch {}: {}'.format(self.epoch, loss))
+        else:
+            print('	Loss after epoch {}: {}'.format(self.epoch, float(loss) - float(self.loss_previous_step)))
+        self.epoch += 1
+        self.loss_previous_step = float(loss)
+                  
 #%%
 # main function
 if __name__ == '__main__':
@@ -42,7 +46,7 @@ if __name__ == '__main__':
 
     # model parameter
     vector_size = 300;
-    workers = 2
+    workers = 4
     epochs = 5
     min_count = 10 # vocabulary under min_count would be ignore
     loss_logger = LossLogger()
@@ -64,6 +68,8 @@ if __name__ == '__main__':
 
     printTime()
     print('Training Word2Vec model')
+    print('Parameter summary :\n\tvector_size : {}\n\tworkers : {}\n\tepochs : {}\n\tmin_count : {}'.format(vector_size, workers, epochs, min_count))
+    t = time.time()
     model = Word2Vec(sentences, 
                      sg=1, 
                      vector_size=vector_size, 
@@ -74,16 +80,11 @@ if __name__ == '__main__':
                      compute_loss=True)
 
     printTime()
-    print('Training done.')
+    print('Training done. cost [{:d}:{:d}:{:d}]'.format(int((time.time()-t)/3600), int(((time.time()-t)%3600)/60), int((time.time()-t)%60)))
 
     printTime()
-    print('Save trained word2vec model to "{path}"'.format(path=model_output_path))
+    print('Save trained word2vec model to "{}"'.format(model_output_path))
     model.save(model_output_path)
-    #
-    #with open(model_output_path, 'w', encoding='utf-8') as f:
-    #  f.write('%d %d\n' % (len(model.wv.vocab), vector_size))
-    #  for word in tqdm(model.wv.vocab):
-    #    f.write('%s %s\n' % (word, ' '.join([str(v) for v in model.wv[word]])))
-    #
+
     printTime()
     print('Done')

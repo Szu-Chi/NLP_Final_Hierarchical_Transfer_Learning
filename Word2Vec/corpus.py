@@ -37,7 +37,9 @@ def createPKL_healthdoc(healthdoc_path):
     # The pkl file store :
     #   first line : the size of the file (e.g. 2724, total documents in healthdoc)
     #   second line to end : list of word segmentation result of each document
-    #   (e.g. ['核災','食品', '／', '買到', '「', '核災區', '」', '食品', '？', ...])
+    #   e.g.
+    #       2724 
+    #       ['核災','食品', '／', '買到', '「', '核災區', '」', '食品', '？', ...])
 
     pklfile_path = '../dataset/healthdoc.pkl'  # pkl file store at the root dir
     # check if there exist healthdoc.pkl, continue it if true 
@@ -77,7 +79,9 @@ def createPKL_wiki(wiki_dump_path):
     # The pkl file store :
     #   first line : the size of the file (e.g. 427601, total documents in zh-wiki)
     #   second line to end : list of word segmentation result of each document
-    #   (e.g. ['歐幾裏得', '西元', '前', '三世紀', '的', '古希臘', '數學家', ...])
+    #   e.g.
+    #       427601 
+    #       ['歐幾裏得', '西元', '前', '三世紀', '的', '古希臘', '數學家', ...]
 
     pklfile_path = '../dataset/zhwiki.pkl'  # pkl file store at the root dir
     # check if there exist zhwiki.pkl, continue if true 

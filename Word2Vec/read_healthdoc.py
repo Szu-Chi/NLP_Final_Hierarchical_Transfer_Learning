@@ -1,4 +1,5 @@
 import csv
+import pickle
 import numpy as np
 
 def loading(dataset_path):
@@ -13,3 +14,13 @@ def loading(dataset_path):
     with open(dataset_path+file, 'r', encoding="utf-8") as f:
         content[file]=f.read()
   return content
+
+def loadHealthdocPKL(healdoc_pkl_path):
+  healthdoc_pkl = open(healdoc_pkl_path, "rb")
+  total_size = pickle.load(healthdoc_pkl) # get size of healthdoc_pkl
+  doc_ws_list = []
+  for doc in range(total_size):
+      doc_ws=pickle.load(healthdoc_pkl, encoding='utf-8')
+      doc_ws_list.append(doc_ws)
+  return(doc_ws_list)
+  
