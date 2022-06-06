@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import tensorflow_addons as tfa
 import health_doc
 import matplotlib.pyplot as plt
+from sklearn.metrics import f1_score, accuracy_score
 import jieba
 from ckiptagger import WS
 ws = WS("./ckiptagger_data")
@@ -160,8 +161,8 @@ def save_model_history(history, topics):
 
 # %% [markdown]
 # ### Training Category Model
-class_weight = [1]
-# class_weight = [1, 2, 3, 5, 10, 30, 50]
+# class_weight = [1]
+class_weight = [1, 2, 3, 5, 10, 30, 50]
 for i, label_name in enumerate(dataset_label_name):
     x = np.array([id_vector[x] for x in train_x])
     y = train_y[:,i]
@@ -230,10 +231,12 @@ accuray = keras.metrics.Accuracy()
 micro_f1.update_state(test_y, pred_y)
 macro_f1.update_state(test_y, pred_y)
 weighted_f1.update_state(test_y, pred_y)
+subset_acc = accuracy_score(test_y, pred_y, normalize=True)
 
 print(f'micro_f1   : {micro_f1.result(): .4f}')
 print(f'macro_f1   : {macro_f1.result(): .4f}')
 print(f'weighted_f1: {weighted_f1.result(): .4f}')
+print(f'subset_accuracy: {subset_acc: .4f}')
 
 label_f1=[]
 for i, label_name in enumerate(dataset_label_name):

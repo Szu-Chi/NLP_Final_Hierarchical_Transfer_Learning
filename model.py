@@ -19,7 +19,7 @@ METRICS = [
 ]
 
 
-def make_model(embedding_matrix, num_tokens, embedding_dim, metrics=METRICS):
+def make_model(cat_num, embedding_matrix, num_tokens, embedding_dim, metrics=METRICS):
     int_sequences_input = keras.Input(shape=(300,), dtype="int64")
     embedded_sequences = Embedding(
         num_tokens,
@@ -41,32 +41,10 @@ def make_model(embedding_matrix, num_tokens, embedding_dim, metrics=METRICS):
 
     flatten_layer = keras.layers.Flatten()(merged)
     # linear_layer = keras.layers.Dense(200, activation='sigmoid')(flatten_layer)
-    out = keras.layers.Dense(1, activation='sigmoid')(flatten_layer)
+    out = keras.layers.Dense(cat_num, activation='sigmoid')(flatten_layer)
 
     model = keras.models.Model(int_sequences_input, out)
     model.compile(
         loss="binary_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=1e-3), metrics=METRICS
     )
     return model
-
-# ### Define Transfer Model
-def make_trans_model(parent, embedding_matrix, num_tokens, embedding_dim):
-    parent_model = make_model(embedding_matrix, num_tokens, embedding_dim)
-    parent_model.load_weights(parent)
-    child_model = keras.models.Model(inputs=parent_model.input, outputs=parent_model.layers[-2].output)
-    new_out = keras.layers.Dense(1, activation='sigmoid', name='new_dense')(child_model.layers[-1].output)
-    child_model = keras.models.Model(inputs=parent_model.input, outputs=new_out)
-    child_model.layers[1].trainable=False
-    optimizers = [
-        tf.keras.optimizers.Adam(learning_rate=1e-3),
-        tf.keras.optimizers.Adam(learning_rate=1e-3)
-    ]
-
-    optimizers_and_layers = [   (optimizers[0], child_model.layers[2]), 
-                                (optimizers[0], child_model.layers[4]),
-                                (optimizers[1], child_model.layers[-1])]
-    optimizer = tfa.optimizers.MultiOptimizer(optimizers_and_layers)
-    child_model.compile(
-        loss="binary_crossentropy", optimizer=optimizer, metrics=METRICS
-    )
-    return child_model
