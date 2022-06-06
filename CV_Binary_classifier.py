@@ -118,7 +118,7 @@ with open('multi-times cv result.csv', 'w') as f:
     f.write('\n')
         
 #%%
-for cv_times in range(1):
+for cv_times in range(10):
     cv_micro_f1 = []
     cv_macro_f1 = []
     cv_accuray = []
@@ -202,7 +202,7 @@ for cv_times in range(1):
             early_stopping = tf.keras.callbacks.EarlyStopping(
                 monitor='val_micro_f1', 
                 verbose=1,
-                patience=5,
+                patience=10,
                 mode='max',
                 restore_best_weights=True)
             model_list = []
@@ -214,7 +214,7 @@ for cv_times in range(1):
                 # img_path='network_image.png'
                 # keras.utils.plot_model(model, to_file=img_path)
                 # model.summary()
-                history = model.fit(x_train, y_train, batch_size=128, epochs=20, callbacks=[early_stopping],
+                history = model.fit(x_train, y_train, batch_size=128, epochs=30, callbacks=[early_stopping],
                                     validation_split=0.15, class_weight = {0: 1, 1:cw})
                 val_micro_f1.append(max(history.history['val_micro_f1']))
                 model_list.append(model)
@@ -268,7 +268,7 @@ for cv_times in range(1):
         plt.xticks(rotation=30, ha='right')
         plt.title(f'label micro f1')
         cv_label_f1.append(label_f1)
-        break
+
     with open('multi-times cv result.csv', 'a') as f:
         f.write(f'{sum(cv_micro_f1)/K: .4f},')
         f.write(f'{sum(cv_macro_f1)/K: .4f},')

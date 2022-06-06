@@ -222,18 +222,18 @@ for cv_times in range(10):
         early_stopping = tf.keras.callbacks.EarlyStopping(
             monitor='val_micro_f1', 
             verbose=1,
-            patience=3,
+            patience=10,
             mode='max',
             restore_best_weights=True)
         tf.keras.backend.clear_session()
-        model = make_model(embedding_matrix, num_tokens, embedding_dim)
+        model = make_model(9, embedding_matrix, num_tokens, embedding_dim)
         # img_path='network_image.png'
         # keras.utils.plot_model(model, to_file=img_path)
         # model.summary()
-        history = model.fit(x_train, y_train, batch_size=128, epochs=10, callbacks=[early_stopping],
+        history = model.fit(x_train, y_train, batch_size=128, epochs=30, callbacks=[early_stopping],
                             validation_split=0.15)
         save_model_history(history, "multi label model")
-        model.save_weights(model_path+'multi label model.h5')
+        model.save(model_path+'multi label model.h5')
         gc.collect()
 
         #%% [markdown]
