@@ -197,7 +197,7 @@ x = np.array([id_vector[x] for x in x_train])
 history = model.fit(x, y_teacher, batch_size=128, epochs=30, callbacks=[early_stopping],
                     validation_split=0.15)
 save_model_history(history, "multi label model")
-model.save_weights('model/multi label model.h5')
+model.save('model/multi label model_KD.h5')
 gc.collect()
 
 #%% [markdown]
