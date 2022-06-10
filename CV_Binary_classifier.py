@@ -11,12 +11,15 @@ import matplotlib.pyplot as plt
 import tensorflow_addons as tfa
 import health_doc
 import matplotlib.pyplot as plt
-import jieba
-from ckiptagger import WS
-ws = WS("./ckiptagger_data")
 import gc
 from imp import reload
+import doc_preprocessing
+from doc_preprocessing import vectorlize, get_data_from_kfold
 
+# ### Import Model
+import GRU_att
+reload(GRU_att)
+from GRU_att import make_model, model_fit, calc_score
 #%% [markdown]
 # ### Loading HealthDoc dataset
 dataset_path = "../dataset/HealthDoc/"
@@ -33,41 +36,11 @@ with open('k_label', 'rb') as f:
 K = len(k_id)
 #%% [markdown]
 # ### Define Function 
-def vectorlize(token, word_index):
-    max_len = 300
-    vec = []
-    for t in token:
-        if t in word_index.keys():
-            vec.append(word_index[t])
-        else:
-            vec.append(word_index['[UKN]'])
-    vec.append(word_index[''])
-    if len(vec) < max_len:
-        pad = np.zeros(max_len)
-        pad[0:len(vec)]=vec
-        return pad
-    return np.array(vec[0:max_len])
-        
-def get_model_result(model, test_x):
-    x = np.array([id_vector[x] for x in test_x])
+def get_model_result(model, x):
     y_pred = model.predict(x)
-    y_pred = np.array([1 if x > 0.5 else 0 for x in y_pred])
-    return y_pred
-
-def get_subset_data(k_id, k_label, index):
-    x = np.empty(0)
-    y = np.empty((0,9))
-    subset_id = [k_id[i] for i in index]
-    subset_label = [k_label[i] for i in index]
-    for id, label in zip(subset_id, subset_label):
-        x = np.append(x, id)
-        y = np.append(y, label, axis=0)
-    return x, y
-
-# ### Define HTrans Model
-import model
-reload(model)
-from model import make_model
+    y_pred[y_pred>=0.5] = 1
+    y_pred[y_pred<0.5] = 0
+    return np.array(y_pred[:,0])
 
 def save_model_history(history, topics):
     plt.figure()
@@ -88,27 +61,6 @@ def save_model_history(history, topics):
     plt.legend(['Train', 'Validate'], loc='upper left')
     plt.savefig('img/micro_f1/'+topics+'_micro_f1.png')
 
-# %% [markdown]
-# ### Load pre-trained word embeddings
-path_to_glove_file = './word_vector/healthdoc-wiki.vector'
-embeddings_index = {}
-with open(path_to_glove_file,'r', encoding='utf-8') as f:
-    for line in f:
-        word, coefs = line.split(maxsplit=1)
-        coefs = np.fromstring(coefs, "f", sep=" ")
-        embeddings_index[word] = coefs
-
-print("Found %s word vectors." % len(embeddings_index))
-#%%
-def loadHealthdocPKL(healdoc_pkl_path):
-  healthdoc_pkl = open(healdoc_pkl_path, "rb")
-  total_size = pickle.load(healthdoc_pkl) # get size of healthdoc_pkl
-  doc_ws_list = []
-  for doc in range(total_size):
-      doc_ws=pickle.load(healthdoc_pkl, encoding='utf-8')
-      doc_ws_list.append(doc_ws)
-  return(doc_ws_list)
-  
 #%% [markdown]
 # ### Cross validation
 with open('multi-times cv result.csv', 'w') as f:
@@ -116,8 +68,8 @@ with open('multi-times cv result.csv', 'w') as f:
     for label_name in dataset_label_name:
         f.write(f'{label_name},')
     f.write('\n')
-        
 #%%
+token_list = health_doc.loadHealthdocPKL('healthdoc.pkl')
 for cv_times in range(10):
     cv_micro_f1 = []
     cv_macro_f1 = []
@@ -125,63 +77,27 @@ for cv_times in range(10):
     cv_weighted_f1 = []
     cv_label_f1 = []
     for testing_time in range(K):
+        # ### Split data for train and test
         subset_test = [testing_time]
         subset_train = np.delete(np.arange(K), subset_test)
-        train_x, train_y = get_subset_data(k_id, k_label, subset_train)
-        test_x, test_y = get_subset_data(k_id, k_label, subset_test)
+        x_train, y_train = get_data_from_kfold(k_id, k_label, subset_train)
+        x_test, y_test = get_data_from_kfold(k_id, k_label, subset_test)
 
         model_path = f'model/{subset_test[0]}/'
 
         #%% [markdown]
-        # ### Get Train Content
-        train_content = {}
-        for x in train_x:
-            train_content[x] = dataset_content[x]
-
-        #%% [markdown]
-        # ### Get token
-        voc = ['', '[UKN]']
-        id_token={}
-        token_list = loadHealthdocPKL('healthdoc.pkl')
-        for k, t in zip(dataset_content.keys(), token_list):
-            id_token[k] = t
-            if k in train_x:
-                voc += id_token[k]
-            pass
-        voc = list(set(voc))
-        voc = sorted(voc)
+        # ### Prepare a corresponding embedding matrix
+        id_token = doc_preprocessing.get_id_token(dataset_content.keys(), token_list)
+        voc = doc_preprocessing.get_voc(x_train, id_token)
         print(voc[0:100])
         word_index = dict(zip(voc, range(len(voc))))
 
-        #%% [markdown]
-        # ### Prepare a corresponding embedding matrix
+        embedding_matrix = doc_preprocessing.get_embedding_matrix(voc, word_index)
         num_tokens = len(voc) + 2
         embedding_dim = 300
-        hits = 0
-        misses = 0
-
-        embedding_matrix = np.zeros((num_tokens, embedding_dim))
-        for word, i in word_index.items():
-            embedding_vector = embeddings_index.get(word)
-            if embedding_vector is not None:
-                # Words not found in embedding index will be all-zeros.
-                # This includes the representation for "padding" and "OOV"
-                embedding_matrix[i] = embedding_vector
-                hits += 1
-            else:
-                misses += 1
-        print("Converted %d words (%d misses)" % (hits, misses))
 
         # %% [markdown]
-        # ### Loading pre-trained word embeddings matrix into an Embedding Layer
-        from tensorflow.keras.layers import Embedding
-        embedding_layer = Embedding(
-            num_tokens,
-            embedding_dim,
-            embeddings_initializer=keras.initializers.Constant(embedding_matrix),
-            trainable=False,
-        )
-
+        # ### Create id_vector
         id_vector = {}
         for id, token in id_token.items():
             id_vector[id]=vectorlize(token, word_index)    
@@ -190,13 +106,14 @@ for cv_times in range(10):
         # class_weight = [1]
         class_weight = [0.05, 0.1, 0.5, 1, 2, 3, 5]
         for i, label_name in enumerate(dataset_label_name):
-            x = np.array([id_vector[x] for x in train_x])
-            y = train_y[:,i]
-            x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, stratify=y)
+            x_train_vec = np.array([id_vector[x] for x in x_train])
+            y_train_binary = y_train[:,i]
+            x_train_vec, x_val_vec, y_train_binary, y_val_binary = train_test_split(x_train_vec, y_train_binary, 
+                                                                test_size=0.15, stratify=y_train_binary)
 
             print(label_name)
-            print(f'num of train positive: {np.where(y_train==1)[0].size}')
-            print(f'num of val positive: {np.where(y_val==1)[0].size}')
+            print(f'num of train positive: {np.where(y_train_binary==1)[0].size}')
+            print(f'num of val positive: {np.where(y_val_binary==1)[0].size}')
 
 
             early_stopping = tf.keras.callbacks.EarlyStopping(
@@ -211,11 +128,8 @@ for cv_times in range(10):
             for cw in class_weight:
                 tf.keras.backend.clear_session()
                 model = make_model(1, embedding_matrix, num_tokens, embedding_dim)
-                # img_path='network_image.png'
-                # keras.utils.plot_model(model, to_file=img_path)
-                # model.summary()
-                history = model.fit(x_train, y_train, batch_size=128, epochs=30, callbacks=[early_stopping],
-                                    validation_split=0.15, class_weight = {0: 1, 1:cw})
+                
+                history = model_fit(model, x_train_vec, y_train_binary, val_data=(x_val_vec, y_val_binary))
                 val_micro_f1.append(max(history.history['val_micro_f1']))
                 model_list.append(model)
                 history_list.append(history)
@@ -229,39 +143,28 @@ for cv_times in range(10):
 
         #%% [markdown]
         # ### Predict Result
-        pred_y = np.zeros(test_y.shape)   
+        y_pred = np.zeros(y_test.shape)   
         for i, label_name in enumerate(dataset_label_name):
             print(label_name)
             tf.keras.backend.clear_session()
             print(model_path+label_name+'.h5')
             model = keras.models.load_model(model_path+label_name+'.h5')
-            pred_y[:, i] = get_model_result(model, test_x)
+            x_test_vec = np.array([id_vector[x] for x in x_test])
+            y_pred[:, i] = get_model_result(model, x_test_vec)
             del model
             gc.collect()
 
         #%% [markdown]
         # ### Calculate Predict Reslut
-        num_classes = test_y.shape[1]
-        micro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
-        macro_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
-        weighted_f1 = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='weighted')
-        micro_f1.update_state(test_y, pred_y)
-        macro_f1.update_state(test_y, pred_y)
-        weighted_f1.update_state(test_y, pred_y)
-        subset_acc = accuracy_score(test_y, pred_y, normalize=True)
-        cv_micro_f1.append(micro_f1.result())
-        cv_macro_f1.append(macro_f1.result())
-        cv_weighted_f1.append(weighted_f1.result())
+        micro_f1, macro_f1, weighted_f1, subset_acc = calc_score(y_test, y_pred)
+        cv_micro_f1.append(micro_f1)
+        cv_macro_f1.append(macro_f1)
+        cv_weighted_f1.append(weighted_f1)
         cv_accuray.append(subset_acc)
-
-        print(f'micro_f1   : {micro_f1.result(): .4f}')
-        print(f'macro_f1   : {macro_f1.result(): .4f}')
-        print(f'weighted_f1: {weighted_f1.result(): .4f}')
-        print(f'accuray    : {subset_acc: .4f}')
 
         label_f1=[]
         for i, label_name in enumerate(dataset_label_name):
-            label_f1.append(f1_score(test_y[:,i], pred_y[:,i]))
+            label_f1.append(f1_score(y_test[:,i], y_pred[:,i]))
             print(f'{label_name:<15}:{label_f1[-1]: .4f}')
         plt.figure()
         plt.bar(dataset_label_name, label_f1)
@@ -279,35 +182,3 @@ for cv_times in range(10):
         for f1_mean in label_f1_mean:
             f.write(f'{f1_mean: .4f},')
         f.write('\n')
-
-#%% [markdown]
-# ### CV Result
-print(f'micro_f1   : {sum(cv_micro_f1)/K: .4f}')
-print(f'macro_f1   : {sum(cv_macro_f1)/K: .4f}')
-print(f'weighted_f1: {sum(cv_weighted_f1)/K: .4f}\n')
-print(f'subset_accuray: {sum(cv_accuray)/K: .4f}\n')
-
-label_f1_mean = np.mean(cv_label_f1, axis=0)
-for label_name, f1_mean in zip(dataset_label_name, label_f1_mean):
-    print(f'{label_name:<15}:{f1_mean: .4f}')
-    
-#%% [markdown]
-# ### Export Result to CSV
-with open('CV_result.csv', 'w') as f:
-    f.write(', micro_f1, macro_f1, weighted_f1\n')
-    for micro, marco, weighted in zip(cv_micro_f1, cv_macro_f1, cv_weighted_f1):
-        f.write(f',{micro}, {marco}, {weighted} \n')
-    f.write(f'Avg., {sum(cv_micro_f1)/K: .5f}, {sum(cv_macro_f1)/K: .5f}, {sum(cv_weighted_f1)/K: .5f}\n')
-
-    for label_name in dataset_label_name:
-        f.write(f',{label_name} ')
-    f.write('\n')
-    for label_f1 in cv_label_f1:
-        for f1 in label_f1:
-            f.write(f', {f1}')
-        f.write('\n')
-    label_f1_mean = np.mean(cv_label_f1, axis=0)
-    f.write('Avg.,')
-    for f1 in label_f1_mean:
-        f.write(f'{f1: .5f}, ')
-    f.write('\n')

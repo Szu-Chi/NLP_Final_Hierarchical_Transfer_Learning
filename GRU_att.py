@@ -1,23 +1,34 @@
-import pickle
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Embedding
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
 from tensorflow import keras
-import matplotlib.pyplot as plt
+from tensorflow.keras.layers import Embedding
 import tensorflow_addons as tfa
-import health_doc
-import matplotlib.pyplot as plt
-import jieba
-from ckiptagger import WS
-ws = WS("./ckiptagger_data")
-import gc
+from sklearn.metrics import f1_score, accuracy_score
+
+def calc_score(y_test, y_pred):
+    num_classes = y_test.shape[1]
+    micro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
+    macro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
+    weighted_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='weighted')
+    
+    micro_f1_metrics.update_state(y_test, y_pred)
+    macro_f1_metrics.update_state(y_test, y_pred)
+    weighted_f1_metrics.update_state(y_test, y_pred)
+
+    micro_f1 = micro_f1_metrics.result()
+    macro_f1 = macro_f1_metrics.result()
+    weighted_f1 = weighted_f1_metrics.result()
+    subset_acc = accuracy_score(y_test, y_pred, normalize=True)
+    print(f'micro_f1   : {micro_f1: .4f}')
+    print(f'macro_f1   : {macro_f1: .4f}')
+    print(f'weighted_f1: {weighted_f1: .4f}')
+    print(f'accuray    : {subset_acc: .4f}')
+    return micro_f1, macro_f1, weighted_f1, subset_acc
+
 
 METRICS = [
     tfa.metrics.F1Score(num_classes=1, threshold=0.5, average='micro', name='micro_f1')
 ]
-
 
 def make_model(cat_num, embedding_matrix, num_tokens, embedding_dim, metrics=METRICS):
     int_sequences_input = keras.Input(shape=(300,), dtype="int64")
@@ -48,3 +59,19 @@ def make_model(cat_num, embedding_matrix, num_tokens, embedding_dim, metrics=MET
         loss="binary_crossentropy", optimizer=keras.optimizers.Adam(learning_rate=1e-3), metrics=METRICS
     )
     return model
+
+
+def model_fit(model, x, y, val_data=None):
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_micro_f1', 
+        verbose=1,
+        patience=10,
+        mode='max',
+        restore_best_weights=True)
+    if val_data != None:
+        history = model.fit(x, y, batch_size=128, epochs=100, callbacks=[early_stopping],
+                        validation_data=val_data)
+    else:
+        history = model.fit(x, y, batch_size=128, epochs=100, callbacks=[early_stopping],
+                        validation_split=0.15)
+    return history
