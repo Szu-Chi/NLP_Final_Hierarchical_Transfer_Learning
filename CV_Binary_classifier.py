@@ -129,7 +129,8 @@ for cv_times in range(10):
                 tf.keras.backend.clear_session()
                 model = make_model(1, embedding_matrix, num_tokens, embedding_dim)
                 
-                history = model_fit(model, x_train_vec, y_train_binary, val_data=(x_val_vec, y_val_binary))
+                history = model_fit(model, x_train_vec, y_train_binary, 
+                                    val_data=(x_val_vec, y_val_binary), class_weight={0:1, 1:cw})
                 val_micro_f1.append(max(history.history['val_micro_f1']))
                 model_list.append(model)
                 history_list.append(history)

@@ -61,7 +61,7 @@ def make_model(cat_num, embedding_matrix, num_tokens, embedding_dim, metrics=MET
     return model
 
 
-def model_fit(model, x, y, val_data=None):
+def model_fit(model, x, y, val_data=None, class_weight=None):
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='val_micro_f1', 
         verbose=1,
@@ -70,8 +70,8 @@ def model_fit(model, x, y, val_data=None):
         restore_best_weights=True)
     if val_data != None:
         history = model.fit(x, y, batch_size=128, epochs=100, callbacks=[early_stopping],
-                        validation_data=val_data)
+                        validation_data=val_data, class_weight=class_weight)
     else:
         history = model.fit(x, y, batch_size=128, epochs=100, callbacks=[early_stopping],
-                        validation_split=0.15)
+                        validation_split=0.15, class_weight=class_weight)
     return history
