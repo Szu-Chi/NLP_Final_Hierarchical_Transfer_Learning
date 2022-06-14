@@ -16,9 +16,9 @@ import doc_preprocessing
 from doc_preprocessing import vectorlize, get_data_from_kfold
 
 # ### Import Model
-import GRU_att
-reload(GRU_att)
-from GRU_att import make_model, model_fit, calc_score
+import HAN
+reload(HAN)
+from HAN import make_model, model_fit, calc_score, get_model_result_HAN
 #%% [markdown]
 # ### Loading HealthDoc dataset
 dataset_path = "../dataset/HealthDoc/"
@@ -113,13 +113,13 @@ for cv_times in range(10):
         history = model_fit(model, x_train_vec, y_train, val_data=(x_val_vec, y_val))
         
         save_model_history(history, "multi label model")
-        model.save(model_path+'multi label model_KD.h5')
+        model.save_weights(model_path+'multi label model.h5')
         gc.collect()
 
         #%% [markdown]
         # ### Predict Result
         x_test_vec = np.array([id_vector[x] for x in x_test])
-        y_pred = get_model_result(model, x_test_vec)
+        y_pred = get_model_result_HAN(model, x_test_vec)
 
         #%% [markdown]
         # ### Calculate Predict Reslut

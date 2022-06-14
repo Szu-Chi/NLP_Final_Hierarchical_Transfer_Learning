@@ -8,9 +8,30 @@ from tensorflow import keras
 import tensorflow_addons as tfa
 from tensorflow.keras.preprocessing import sequence
 from tensorflow.compat.v1.keras.layers import CuDNNLSTM
+from sklearn.metrics import accuracy_score
 
 maxlen_word = 300
 maxlen_sentence = 16
+
+def calc_score(y_test, y_pred):
+    num_classes = y_test.shape[1]
+    micro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
+    macro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
+    weighted_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='weighted')
+    
+    micro_f1_metrics.update_state(y_test, y_pred)
+    macro_f1_metrics.update_state(y_test, y_pred)
+    weighted_f1_metrics.update_state(y_test, y_pred)
+
+    micro_f1 = micro_f1_metrics.result()
+    macro_f1 = macro_f1_metrics.result()
+    weighted_f1 = weighted_f1_metrics.result()
+    subset_acc = accuracy_score(y_test, y_pred, normalize=True)
+    print(f'micro_f1   : {micro_f1: .4f}')
+    print(f'macro_f1   : {macro_f1: .4f}')
+    print(f'weighted_f1: {weighted_f1: .4f}')
+    print(f'accuray    : {subset_acc: .4f}')
+    return micro_f1, macro_f1, weighted_f1, subset_acc
 
 def make_model(cat_num, embedding_matrix, num_tokens, embedding_dim, maxlen_word=maxlen_word, maxlen_sentence=maxlen_sentence):
     METRICS = [
@@ -59,6 +80,10 @@ def model_fit(model, x, y, val_data=None, class_weight=None, maxlen_word=maxlen_
         mode='max',
         restore_best_weights=True)
     if val_data != None:
+        val_data = list(val_data)
+        val_data[0] = sequence.pad_sequences(val_data[0], maxlen=maxlen_sentence * maxlen_word)
+        val_data[0] = val_data[0].reshape((len(val_data[0]), maxlen_sentence, maxlen_word))
+        val_data = tuple(val_data)
         history = model.fit(x, y, batch_size=32, epochs=30, callbacks=[early_stopping],
                         validation_data=val_data, class_weight=class_weight)
     else:
@@ -67,8 +92,7 @@ def model_fit(model, x, y, val_data=None, class_weight=None, maxlen_word=maxlen_
     return history 
 
 
-def get_model_result_HAN(model, test_x, id_vector, maxlen_word = maxlen_word, maxlen_sentence = maxlen_sentence):
-    x = np.array([id_vector[x] for x in test_x])
+def get_model_result_HAN(model, x, maxlen_word = maxlen_word, maxlen_sentence = maxlen_sentence):
     x = sequence.pad_sequences(x, maxlen=maxlen_sentence * maxlen_word)
     x = x.reshape((len(x), maxlen_sentence, maxlen_word))
 

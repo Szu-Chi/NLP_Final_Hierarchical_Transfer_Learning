@@ -17,9 +17,9 @@ import doc_preprocessing
 from doc_preprocessing import vectorlize, get_data_from_kfold
 
 # ### Import Model
-import GRU_att
-reload(GRU_att)
-from GRU_att import make_model, model_fit, calc_score
+import HAN
+reload(HAN)
+from HAN import make_model, model_fit, calc_score, get_model_result_HAN
 #%% [markdown]
 # ### Loading HealthDoc dataset
 dataset_path = "../dataset/HealthDoc/"
@@ -137,7 +137,7 @@ for cv_times in range(10):
             best_model = model_list[np.argmax(val_micro_f1)]
             best_model_history = history_list[np.argmax(val_micro_f1)]
             save_model_history(best_model_history, label_name)
-            best_model.save(model_path+label_name+'.h5')
+            best_model.save_weights(model_path+label_name+'.h5')
             del model_list
             del best_model
             gc.collect()
@@ -149,9 +149,12 @@ for cv_times in range(10):
             print(label_name)
             tf.keras.backend.clear_session()
             print(model_path+label_name+'.h5')
-            model = keras.models.load_model(model_path+label_name+'.h5')
+            # model = keras.models.load_model(model_path+label_name+'.h5')
+            model = make_model(1, embedding_matrix, num_tokens, embedding_dim)
+            model.load_weights(model_path+label_name+'.h5') 
+
             x_test_vec = np.array([id_vector[x] for x in x_test])
-            y_pred[:, i] = get_model_result(model, x_test_vec)
+            y_pred[:, i] = get_model_result_HAN(model, x_test_vec)
             del model
             gc.collect()
 
