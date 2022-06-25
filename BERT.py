@@ -7,14 +7,16 @@ The BERT authors recommend some hyperparameter options for fine-tuning
   • Learning rate (Adam): 5e-5, 3e-5, 2e-5
   • Number of epochs: 2, 3, 4
 '''
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow_addons as tfa
+from sklearn.metrics import f1_score, accuracy_score
 from transformers import BertTokenizer, BertModel
 from transformers import TFBertModel,  BertConfig, BertTokenizerFast
 from tensorflow.keras.initializers import TruncatedNormal
 
-max_length = 300
+max_length = 512
 model_name = 'hfl/chinese-bert-wwm' # 哈工大BERT
 
 def make_model(cat_num, max_length=max_length, model_name=model_name):
@@ -26,13 +28,12 @@ def make_model(cat_num, max_length=max_length, model_name=model_name):
     config = BertConfig.from_pretrained(model_name)
     config.output_hidden_states = False
     
-    tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path = model_name, config = config) # Load BERT tokenizer
     transformer_model = TFBertModel.from_pretrained(model_name, config = config) # Load the Transformers BERT model
       
     ### ------- Build the model ------- ###
     bert = transformer_model.layers[0] # Load the MainLayer
 
-    input_ids = keras.Input(shape=(100,), dtype='int64', name='input_ids')
+    input_ids = keras.Input(shape=(max_length,), dtype='int64', name='input_ids')
     # attention_mask = Input(shape=(max_length,), name='attention_mask', dtype='int32') 
     # inputs = {'input_ids': input_ids, 'attention_mask': attention_mask}
     inputs = {'input_ids': input_ids}
@@ -64,16 +65,16 @@ def model_fit(model, x, y, val_data=None, class_weight=None):
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='val_micro_f1', 
         verbose=1,
-        patience=3,
+        patience=2,
         mode='max',
         restore_best_weights=True)
     if val_data != None:
         history = model.fit(
             {'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=16, epochs=5, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
+            batch_size=32, epochs=5, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
     else:
         history = model.fit({'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=16, epochs=5, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
+            batch_size=32, epochs=5, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
     return history
 
 def model_save(model, path):
@@ -84,6 +85,13 @@ def model_load(path, cat_num):
     model = make_model(cat_num)
     model.load_weights(path)  
     return model  
+
+def get_tokenizer(model_name=model_name):
+    config = BertConfig.from_pretrained(model_name)
+    config.output_hidden_states = False
+    # Load BERT tokenizer
+    tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path = model_name, config = config) 
+    return tokenizer
 
 def get_model_result(model, x):
     y_pred = model.predict(x={'input_ids': x['input_ids']})
@@ -96,8 +104,7 @@ def get_model_result(model, x):
       y_pred[y_pred<0.5] = 0
     return y_pred      
 
-
-def getTokenized(dataset_id, dataset_content, tokenizer):
+def get_tokenized_data(dataset_id, dataset_content, tokenizer):
   # return tokenized data with BERT input format
   doc_content = []
   for name in dataset_id:
@@ -113,3 +120,23 @@ def getTokenized(dataset_id, dataset_content, tokenizer):
       return_token_type_ids = False,
       return_attention_mask = True)  
   return word_pieces    
+
+def calc_score(y_test, y_pred):
+    num_classes = y_test.shape[1]
+    micro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='micro')
+    macro_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='macro')
+    weighted_f1_metrics = tfa.metrics.F1Score(num_classes=num_classes, threshold=0.5, average='weighted')
+    
+    micro_f1_metrics.update_state(y_test, y_pred)
+    macro_f1_metrics.update_state(y_test, y_pred)
+    weighted_f1_metrics.update_state(y_test, y_pred)
+
+    micro_f1 = micro_f1_metrics.result()
+    macro_f1 = macro_f1_metrics.result()
+    weighted_f1 = weighted_f1_metrics.result()
+    subset_acc = accuracy_score(y_test, y_pred, normalize=True)
+    print(f'micro_f1   : {micro_f1: .4f}')
+    print(f'macro_f1   : {macro_f1: .4f}')
+    print(f'weighted_f1: {weighted_f1: .4f}')
+    print(f'accuray    : {subset_acc: .4f}')
+    return micro_f1, macro_f1, weighted_f1, subset_acc  
