@@ -16,7 +16,7 @@ from transformers import BertTokenizer, BertModel
 from transformers import TFBertModel,  BertConfig, BertTokenizerFast
 from tensorflow.keras.initializers import TruncatedNormal
 
-max_length = 512
+max_length = 300
 model_name = 'hfl/chinese-bert-wwm' # 哈工大BERT
 
 def make_model(cat_num, max_length=max_length, model_name=model_name):
@@ -71,10 +71,10 @@ def model_fit(model, x, y, val_data=None, class_weight=None):
     if val_data != None:
         history = model.fit(
             {'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=32, epochs=5, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
+            batch_size=16, epochs=5, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
     else:
         history = model.fit({'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=32, epochs=5, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
+            batch_size=16, epochs=5, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
     return history
 
 def model_save(model, path):
@@ -104,7 +104,7 @@ def get_model_result(model, x):
       y_pred[y_pred<0.5] = 0
     return y_pred      
 
-def get_tokenized_data(dataset_id, dataset_content, tokenizer):
+def get_tokenized_data(dataset_id, dataset_content, tokenizer, max_length=max_length):
   # return tokenized data with BERT input format
   doc_content = []
   for name in dataset_id:
@@ -112,7 +112,7 @@ def get_tokenized_data(dataset_id, dataset_content, tokenizer):
 
   word_pieces = tokenizer(
       text=doc_content,  
-      max_length=100,
+      max_length=max_length,
       add_special_tokens=True,  # Add '[CLS]', '[SEP]', '[UNK]'  
       truncation=True,  # if token's lenght longer than 512 then truncate it
       padding=True, # if token's lenght less than 512 then padding it
