@@ -1,6 +1,9 @@
 import pickle
 import numpy as np
 import tensorflow as tf
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+  tf.config.experimental.set_memory_growth(gpu, True)
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score, accuracy_score
 from tensorflow import keras
@@ -21,7 +24,7 @@ from BERT_teacher_pred import teacher_pred
 
 if __name__ == '__main__':
     # ### Loading HealthDoc dataset
-    dataset_path = "HealthDoc/"
+    dataset_path = "../dataset/HealthDoc/"
     dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.loading(dataset_path)
 
     # ### Loading K-fold list
@@ -59,23 +62,25 @@ if __name__ == '__main__':
 
                 print(label_name)
 
-                model_list = []
                 val_micro_f1 = []
-                history_list = []
+                # history_list = []
                 for cw in class_weight:
                     tf.keras.backend.clear_session()
                     model = make_model(1)                
                     history = model_fit(model, x_train_vec, y_train_binary, class_weight={0:1, 1:cw})
                     val_micro_f1.append(max(history.history['val_micro_f1']))
-                    model_list.append(model)
-                    history_list.append(history)
-                best_model = model_list[np.argmax(val_micro_f1)]
-                best_model_history = history_list[np.argmax(val_micro_f1)]
+                    # model_list.append(model)
+                    # history_list.append(history)
+                    model_save(model, f'model/temp/{label_name}_{cw}')
+                    del model
+                    gc.collect()
+                best_model = np.argmax(val_micro_f1)
+                model = model_load(f'model/temp/{label_name}_{class_weight[best_model]}', 1)
+                # best_model_history = history_list[np.argmax(val_micro_f1)]
                 #save_model_history(best_model_history, label_name)
-                model_save(best_model, model_path+label_name)
+                model_save(model, model_path+label_name)
                 #best_model.save(model_path+label_name+'.h5')
-                del model_list
-                del best_model
+                del model
                 gc.collect()
 
             #%% [markdown]

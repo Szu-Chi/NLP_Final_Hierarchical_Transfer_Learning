@@ -29,7 +29,7 @@ if (mode):
 
 if __name__ == '__main__':
     # ### Loading HealthDoc dataset
-    dataset_path = "HealthDoc/"
+    dataset_path = "../dataset/HealthDoc/"
     dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.loading(dataset_path)
 
     # ### Loading K-fold list

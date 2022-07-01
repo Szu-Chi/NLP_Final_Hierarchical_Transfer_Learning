@@ -12,12 +12,13 @@ import tensorflow as tf
 from tensorflow import keras
 import tensorflow_addons as tfa
 from sklearn.metrics import f1_score, accuracy_score
-from transformers import BertTokenizer, BertModel
-from transformers import TFBertModel,  BertConfig, BertTokenizerFast
+from transformers import TFBertModel,  BertConfig 
 from tensorflow.keras.initializers import TruncatedNormal
+from transformers import BertTokenizerFast
 
-max_length = 512
-model_name = 'hfl/chinese-bert-wwm' # 哈工大BERT
+max_length = 200
+model_name = 'hfl/chinese-roberta-wwm-ext' # 哈工大BERT
+model_name = 'model/BERT_pretraining_with_HealthDoc/'+model_name
 
 def make_model(cat_num, max_length=max_length, model_name=model_name):
     METRICS = [
@@ -55,7 +56,7 @@ def make_model(cat_num, max_length=max_length, model_name=model_name):
 
     model.compile(
       loss="binary_crossentropy", 
-      #optimizer=keras.optimizers.Adam(learning_rate=3e-05),
+    #   optimizer=keras.optimizers.Adam(learning_rate=3e-05),
       optimizer=optimizer,
       metrics=METRICS
     )
@@ -70,11 +71,11 @@ def model_fit(model, x, y, val_data=None, class_weight=None):
         restore_best_weights=True)
     if val_data != None:
         history = model.fit(
-            {'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=32, epochs=5, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
+            {'input_ids': x['input_ids']}, y,
+            batch_size=8, epochs=15, callbacks=[early_stopping], validation_data=val_data, class_weight=class_weight)
     else:
-        history = model.fit({'input_ids': x['input_ids'], 'attention_mask': x['attention_mask']}, y,
-            batch_size=32, epochs=5, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
+        history = model.fit({'input_ids': x['input_ids']}, y,
+            batch_size=8, epochs=15, callbacks=[early_stopping], validation_split=0.15, class_weight=class_weight)
     return history
 
 def model_save(model, path):
@@ -112,13 +113,13 @@ def get_tokenized_data(dataset_id, dataset_content, tokenizer):
 
   word_pieces = tokenizer(
       text=doc_content,  
-      max_length=100,
+      max_length=max_length,
       add_special_tokens=True,  # Add '[CLS]', '[SEP]', '[UNK]'  
       truncation=True,  # if token's lenght longer than 512 then truncate it
       padding=True, # if token's lenght less than 512 then padding it
       return_tensors='tf',
       return_token_type_ids = False,
-      return_attention_mask = True)  
+      return_attention_mask = False)  
   return word_pieces    
 
 def calc_score(y_test, y_pred):
