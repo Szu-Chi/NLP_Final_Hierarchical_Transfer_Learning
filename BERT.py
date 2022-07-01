@@ -105,7 +105,7 @@ def get_model_result(model, x):
       y_pred[y_pred<0.5] = 0
     return y_pred      
 
-def get_tokenized_data(dataset_id, dataset_content, tokenizer):
+def get_tokenized_data(dataset_id, dataset_content, tokenizer, max_length=max_length):
   # return tokenized data with BERT input format
   doc_content = []
   for name in dataset_id:
