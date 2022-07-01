@@ -19,6 +19,7 @@ dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.load
 df = pd.read_csv(f'{dataset_path}healthdoc_label.csv')
 df['text'] = list(dataset_content.values())
 health_doc_ds = Dataset.from_pandas(df)
+health_doc_ds = health_doc_ds.train_test_split(test_size=0.2)
 health_doc_ds = health_doc_ds.flatten()
 
 #%% [markdown]
@@ -51,7 +52,7 @@ def preprocess_function(examples):
 tokenized_health_doc_ds = health_doc_ds.map(
     preprocess_function,
     batched=True,
-    remove_columns=health_doc_ds.column_names,
+    remove_columns=health_doc_ds["train"].column_names,
 )
 
 
@@ -73,10 +74,18 @@ lm_dataset = tokenized_health_doc_ds.map(group_texts, batched=True)
 from transformers import DataCollatorForLanguageModeling
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
 
-tf_set = lm_dataset.to_tf_dataset(
+tf_train_set = lm_dataset["train"].to_tf_dataset(
     columns=["attention_mask", "input_ids", "labels"],
     dummy_labels=True,
     shuffle=True,
+    batch_size=16,
+    collate_fn=data_collator,
+)
+
+tf_test_set = lm_dataset["test"].to_tf_dataset(
+    columns=["attention_mask", "input_ids", "labels"],
+    dummy_labels=True,
+    shuffle=False,
     batch_size=16,
     collate_fn=data_collator,
 )
@@ -86,7 +95,7 @@ tf_set = lm_dataset.to_tf_dataset(
 model = TFAutoModelForCausalLM.from_pretrained(model_name)
 optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
 model.compile(optimizer=optimizer)
-model.fit(x=tf_set, epochs=1)
+model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3)
 
 #%% [markdown]
 # ### Save pretrained model & tokenizer
