@@ -39,15 +39,15 @@ def model_fit(model, x, y, val_data=None, class_weight=None):
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='val_micro_f1', 
         verbose=1,
-        patience=10,
+        patience=30,
         mode='max',
         restore_best_weights=True)
     
     if val_data != None:
-        history = model.fit(x, y, batch_size=32, epochs=30, callbacks=[early_stopping], 
+        history = model.fit(x, y, batch_size=64, epochs=100, callbacks=[early_stopping], 
                    validation_data=val_data, class_weight=class_weight)
     else:
-        history = model.fit(x, y, batch_size=32, epochs=30, callbacks=[early_stopping], 
+        history = model.fit(x, y, batch_size=64, epochs=100, callbacks=[early_stopping], 
                    validation_split=0.15, class_weight=class_weight)            
     return history
 

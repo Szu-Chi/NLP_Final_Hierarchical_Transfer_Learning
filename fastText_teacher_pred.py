@@ -23,7 +23,7 @@ def get_model_result(model, x):
 def teacher_pred():
     # ### Loading HealthDoc dataset
 
-    token_list_path = "/content/healthdoc.pkl"
+    token_list_path = "healthdoc.pkl"
     healthdoc_ws = loadHealthdocPKL(token_list_path)
     healthdoc_ws = remove_punctuation(healthdoc_ws)
 
@@ -39,7 +39,7 @@ def teacher_pred():
 
     num_tokens = len(word_index)
 
-    dataset_path = "/content/HealthDoc/"
+    dataset_path = "../dataset/HealthDoc/"
     dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.loading(dataset_path)
 
     id_token = doc_preprocessing.get_id_token(dataset_content.keys(), healthdoc_vec)
@@ -86,7 +86,7 @@ def teacher_pred():
             del model
             gc.collect()
         
-        for x, y in zip(x_test, y_pred):
+        for x, y in zip(x_test_keys, y_pred):
             teacher_pred[x] = y
         
         y_pred_th = y_pred

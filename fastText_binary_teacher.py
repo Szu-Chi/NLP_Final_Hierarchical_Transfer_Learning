@@ -9,7 +9,7 @@ from imp import reload
 import doc_preprocessing
 import matplotlib.pyplot as plt
 from doc_preprocessing import get_data_from_kfold
-
+from sklearn.model_selection import train_test_split
 
 import fastText
 reload(fastText)
@@ -19,7 +19,7 @@ from fastText import loadHealthdocPKL, remove_punctuation, build_word_index, vec
 if __name__ == '__main__':
     # ### Loading HealthDoc dataset
 
-    token_list_path = "/content/healthdoc.pkl"
+    token_list_path = "healthdoc.pkl"
     healthdoc_ws = loadHealthdocPKL(token_list_path)
     healthdoc_ws = remove_punctuation(healthdoc_ws)
 
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     num_tokens = len(word_index)
 
-    dataset_path = "/content/HealthDoc/"
+    dataset_path = "../dataset/HealthDoc/"
     dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.loading(dataset_path)
     #print (dataset_id[0], dataset_label[0], dataset_label_name, dataset_content[dataset_id[0]])
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     K = len(k_id)
 
-    for cv_times in range(1):
+    for cv_times in range(10):
         cv_micro_f1 = []
         cv_macro_f1 = []
         cv_accuray = []
@@ -64,24 +64,25 @@ if __name__ == '__main__':
 
             model_path = f'model/{subset_test[0]}/'
 
-            # Prepare train/test data
-            x_train_vec = get_vectorlized_data(x_train_keys, id_token)
-            x_test_vec = get_vectorlized_data(x_test_keys, id_token) 
-
-            print(len(x_train_vec), 'train sequences')
-            print(len(x_test_vec), 'test sequences')
-            print('Average train sequence length: {}'.format(
-                np.mean(list(map(len, x_train_vec)), dtype=int)))
-            print('Average test sequence length: {}'.format(
-                np.mean(list(map(len, x_test_vec)), dtype=int)))
-            x_train, x_test, num_tokens = ngram_feature(x_train_vec, x_test_vec, num_tokens, max_len, ngram_range=ngram_range)
-
             # ### Training Category Model
             # class_weight = [1]
             class_weight = [0.05, 0.1, 0.5, 1, 2, 3, 5]
             for i, label_name in enumerate(dataset_label_name):
+                # Prepare train/test data
+                x_train_vec = get_vectorlized_data(x_train_keys, id_token)
+                x_test_vec = get_vectorlized_data(x_test_keys, id_token) 
+
+                print(len(x_train_vec), 'train sequences')
+                print(len(x_test_vec), 'test sequences')
+                print('Average train sequence length: {}'.format(
+                    np.mean(list(map(len, x_train_vec)), dtype=int)))
+                print('Average test sequence length: {}'.format(
+                    np.mean(list(map(len, x_test_vec)), dtype=int)))
+                x_train, x_test, num_tokens = ngram_feature(x_train_vec, x_test_vec, num_tokens, max_len, ngram_range=ngram_range)
                 y_train_binary = y_train[:,i]
 
+                x_train, x_val, y_train_binary, y_val_binary = train_test_split(x_train, y_train_binary, 
+                                                                test_size=0.15, stratify=y_train_binary)
                 print(label_name)
 
                 model_list = []
@@ -90,7 +91,8 @@ if __name__ == '__main__':
                 for cw in class_weight:
                     tf.keras.backend.clear_session()
                     model = make_model(1, num_tokens=num_tokens, embedding_dim=embedding_dims, max_length=max_len)
-                    history = model_fit(model, x_train, y_train_binary, class_weight={0:1, 1:cw})                                    
+                    history = model_fit(model, x_train, y_train_binary,
+                                        val_data=(x_val, y_val_binary), class_weight={0:1, 1:cw})                                    
                     val_micro_f1.append(max(history.history['val_micro_f1']))
                     model_list.append(model)
                     #model.save(f'model/temp/{label_name}_{cw}'+'.h5')
@@ -143,5 +145,3 @@ if __name__ == '__main__':
             for f1_mean in label_f1_mean:
                 f.write(f'{f1_mean: .4f},')
             f.write('\n')
-
-    teacher_pred()

@@ -19,7 +19,7 @@ from fastText import loadHealthdocPKL, remove_punctuation, build_word_index, vec
 # model
 #   0: Normal multi-label classification
 #   1: Knowledge Distillation
-mode = 0
+mode = 1
 
 if (mode):
     # ### Get Teacher model prediction
@@ -29,7 +29,7 @@ if (mode):
 if __name__ == '__main__':
     # ### Loading HealthDoc dataset
 
-    token_list_path = "/content/healthdoc.pkl"
+    token_list_path = "healthdoc.pkl"
     healthdoc_ws = loadHealthdocPKL(token_list_path)
     healthdoc_ws = remove_punctuation(healthdoc_ws)
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
     num_tokens = len(word_index)
 
-    dataset_path = "/content/HealthDoc/"
+    dataset_path = "../dataset/HealthDoc/"
     dataset_id, dataset_label, dataset_content, dataset_label_name = health_doc.loading(dataset_path)
     #print (dataset_id[0], dataset_label[0], dataset_label_name, dataset_content[dataset_id[0]])
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     K = len(k_id)
 
-    for cv_times in range(1):
+    for cv_times in range(10):
         cv_micro_f1 = []
         cv_macro_f1 = []
         cv_accuray = []
@@ -73,7 +73,7 @@ if __name__ == '__main__':
             x_train_keys, y_train = get_data_from_kfold(k_id, k_label, subset_train)
             x_test_keys, y_test = get_data_from_kfold(k_id, k_label, subset_test)
 
-            model_path = f'/content/model/{subset_test[0]}/'
+            model_path = f'model/{subset_test[0]}/'
 
             # Prepare train/test data
             x_train_vec = get_vectorlized_data(x_train_keys, id_token)
@@ -91,8 +91,8 @@ if __name__ == '__main__':
             tf.keras.backend.clear_session()
             model = make_model(9, num_tokens=num_tokens, embedding_dim=embedding_dims, max_length=max_len)
             if (mode):
-                y_train_teacher = np.empty(x_train.shape+(9,))
-                for i, x in enumerate(x_train):
+                y_train_teacher = np.empty(x_train_keys.shape+(9,))
+                for i, x in enumerate(x_train_keys):
                     y_train_teacher[i,:] = id_teacher_predict[x]                  
                 print('Training Multi-label model with KD')
                 history = model_fit(model, x_train, y_train_teacher)
